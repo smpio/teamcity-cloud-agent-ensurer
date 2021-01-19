@@ -39,17 +39,21 @@ def main():
         resp = s.get(f'{args.base_url}app/rest/agents?fields=agent(id,name,connected,enabled,idleSinceTime)')
         resp.raise_for_status()
         agents = resp.json()
-        idle_agents = sum(1 for a in agents['agent'] if a['connected'] and a['enabled'] and a.get('idleSinceTime'))
+        idle_agents = [a for a in agents['agent'] if a['enabled'] and a.get('idleSinceTime')]
+        connected_idle_agents = [a for a in idle_agents if a['connected']]
 
         resp = s.get(f'{args.base_url}app/rest/cloud/instances')
         resp.raise_for_status()
         cloud_instances = resp.json()
-        scheduled_agents = sum(1 for i in cloud_instances['cloudInstance'] if i['state'] == 'scheduled_to_start')
+        scheduled_agents_count = sum(1 for i in cloud_instances['cloudInstance'] if i['state'] == 'scheduled_to_start')
 
-        log.info('Agents: %d idle, %d pending. Target: %d', idle_agents, scheduled_agents, args.min_idle_agents)
-        idle_agents += scheduled_agents
+        log.info('Agents: %d idle (%d connected), %d pending. Target: %d',
+                 len(idle_agents),
+                 len(connected_idle_agents),
+                 scheduled_agents_count,
+                 args.min_idle_agents)
 
-        agents_to_start = args.min_idle_agents - idle_agents
+        agents_to_start = args.min_idle_agents - len(idle_agents) - scheduled_agents_count
         if agents_to_start > 0:
             log.info('Starting %d agents', agents_to_start)
             for _ in range(agents_to_start):
